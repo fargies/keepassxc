@@ -64,6 +64,25 @@ namespace Utils
      * Get the value of a top-level Entry field using its name.
      */
     QString getTopLevelField(const Entry* entry, const QString& fieldName);
+
+    /**
+     * supported encoding types
+     */
+    enum class Encoding {
+        Base64,
+        Percent,
+        None
+    };
+
+    Encoding parseEncoding(const QString &option);
+
+    QString encode(const QString &value, Encoding encoding);
+
+    /**
+     * status is set to false on failure and left untouched on success.
+     */
+    QString decode(const QString &value, Encoding encoding, bool *status = nullptr);
+
 }; // namespace Utils
 
 #endif // KEEPASSXC_UTILS_H

@@ -385,6 +385,40 @@ void TestCli::testAdd()
     QVERIFY(entry);
     QCOMPARE(entry->username(), QString("newuser5"));
     QCOMPARE(entry->notes(), QString("test\nnew line"));
+
+    setInput("a");
+    /* note: `\n` are verbatim in notes */
+    execCmd(addCmd, {"add", "--encoding", "base64", "-u", "bmV3dXNlcjY=", "--notes", "dGVzdApuZXcgbGluZQ==", m_dbFile->fileName(), "/newuser-entry6"});
+    m_stderr->readLine(); // skip password prompt
+    QCOMPARE(m_stderr->readAll(), QByteArray(""));
+    QCOMPARE(m_stdout->readAll(), QByteArray("Successfully added entry newuser-entry6.\n"));
+
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/newuser-entry6");
+    QVERIFY(entry);
+    QCOMPARE(entry->username(), QString("newuser6"));
+    QCOMPARE(entry->notes(), QString("test\nnew line"));
+
+        setInput("a");
+    /* note: `\n` are verbatim in notes */
+    execCmd(addCmd, {"add", "--encoding", "percent", "-u", "new%20user%207", "--notes", "test%0Anew%20line", m_dbFile->fileName(), "/newuser-entry7"});
+    m_stderr->readLine(); // skip password prompt
+    QCOMPARE(m_stderr->readAll(), QByteArray(""));
+    QCOMPARE(m_stdout->readAll(), QByteArray("Successfully added entry newuser-entry7.\n"));
+
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/newuser-entry7");
+    QVERIFY(entry);
+    QCOMPARE(entry->username(), QString("new user 7"));
+    QCOMPARE(entry->notes(), QString("test\nnew line"));
+
+    setInput("a");
+    /* invalid value should fail */
+    execCmd(addCmd, {"add", "--encoding", "base64", "-u", "in$$valid$$%", m_dbFile->fileName(), "/newuser-entry8"});
+    m_stderr->readLine(); // skip password prompt
+    QCOMPARE(m_stderr->readAll(), QByteArray("Failed to decode arguments.\n"));
+    QCOMPARE(m_stdout->readAll(), QByteArray(""));
+    QVERIFY(!db->rootGroup()->findEntryByPath("/newuser-entry8"));
 }
 
 void TestCli::testAddGroup()
@@ -1184,6 +1218,48 @@ void TestCli::testEdit()
     entry = db->rootGroup()->findEntryByPath("/evennewertitle");
     QVERIFY(entry);
     QCOMPARE(entry->notes(), QString("testing\nline breaks"));
+
+    setInput("a");
+    execCmd(editCmd, {"edit", "--encoding", "base64",
+        "-u", "bmV3ZW5jb2RlZHVzZXI=",
+        "--url", "aHR0cHM6Ly9lbmNvZGVkLXVybA==",
+        "--notes", "YjY0CgkJ",
+        "-t", "bmV3IGVuY29kZWQgdGl0bGU=", m_dbFile->fileName(), "/evennewertitle"});
+    QCOMPARE(m_stdout->readAll(), QByteArray("Successfully edited entry new encoded title.\n"));
+
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/new encoded title");
+    QVERIFY(entry);
+    QCOMPARE(entry->username(), QString("newencodeduser"));
+    QCOMPARE(entry->url(), QString("https://encoded-url"));
+    QCOMPARE(entry->notes(), QString("b64\n\t\t"));
+
+    setInput("a");
+    execCmd(editCmd, {"edit", "--encoding", "percent",
+        "-u", "new%20encoded%20user",
+        "--url", "https%3A%2F%2Fencoded%20url",
+        "--notes", "percent%20%09%20encoding",
+        m_dbFile->fileName(), "/new encoded title"});
+    QCOMPARE(m_stdout->readAll(), QByteArray("Successfully edited entry new encoded title.\n"));
+
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/new encoded title");
+    QVERIFY(entry);
+    QCOMPARE(entry->username(), QString("new encoded user"));
+    QCOMPARE(entry->url(), QString("https://encoded url"));
+    QCOMPARE(entry->notes(), QString("percent \t encoding"));
+
+    setInput("a");
+    execCmd(editCmd, {"edit", "--encoding", "base64",
+        "-u", "Invalid$$", m_dbFile->fileName(), "/new encoded title"});
+    m_stderr->readLine(); // Skip password prompt
+    QCOMPARE(m_stderr->readAll(), QByteArray("Failed to decode arguments.\n"));
+    QCOMPARE(m_stdout->readAll(), QByteArray());
+
+    db = readDatabase();
+    entry = db->rootGroup()->findEntryByPath("/new encoded title");
+    QVERIFY(entry);
+    QCOMPARE(entry->username(), QString("new encoded user"));
 }
 
 void TestCli::testEstimate_data()
@@ -2182,6 +2258,53 @@ void TestCli::testShow()
 
     setInput("a");
     execCmd(showCmd, {"show", "--all", m_dbFile->fileName(), "/Sample Entry"});
+    QCOMPARE(m_stdout->readAll(),
+             QByteArray("Title: Sample Entry\n"
+                        "UserName: User Name\n"
+                        "Password: PROTECTED\n"
+                        "URL: http://www.somesite.com/\n"
+                        "Notes: Notes\n"
+                        "Uuid: {9f4544c2-ab00-c74a-8a1a-6eaf26cf57e9}\n"
+                        "Tags: \n"
+                        "TOTP Seed: PROTECTED\n"
+                        "TOTP Settings: 30;6\n"
+                        "TestAttribute1: b\n"
+                        "testattribute1: a\n"));
+
+    setInput("a");
+    execCmd(showCmd, {"show", "--encoding", "Base64", "--all", m_dbFile->fileName(), "/Sample Entry"});
+    QCOMPARE(m_stdout->readAll(),
+             QByteArray("Title: U2FtcGxlIEVudHJ5\n"
+                        "UserName: VXNlciBOYW1l\n"
+                        "Password: UFJPVEVDVEVE\n"
+                        "URL: aHR0cDovL3d3dy5zb21lc2l0ZS5jb20v\n"
+                        "Notes: Tm90ZXM=\n"
+                        "Uuid: ezlmNDU0NGMyLWFiMDAtYzc0YS04YTFhLTZlYWYyNmNmNTdlOX0=\n"
+                        "Tags: \n"
+                        "TOTP Seed: UFJPVEVDVEVE\n"
+                        "TOTP Settings: MzA7Ng==\n"
+                        "TestAttribute1: Yg==\n"
+                        "testattribute1: YQ==\n"
+                        ));
+
+    setInput("a");
+    execCmd(showCmd, {"show", "--encoding", "Percent", "--all", m_dbFile->fileName(), "/Sample Entry"});
+    QCOMPARE(m_stdout->readAll(),
+             QByteArray("Title: Sample%20Entry\n"
+                        "UserName: User%20Name\n"
+                        "Password: PROTECTED\n"
+                        "URL: http%3A%2F%2Fwww.somesite.com%2F\n"
+                        "Notes: Notes\n"
+                        "Uuid: %7B9f4544c2-ab00-c74a-8a1a-6eaf26cf57e9%7D\n"
+                        "Tags: \n"
+                        "TOTP Seed: PROTECTED\n"
+                        "TOTP Settings: 30%3B6\n"
+                        "TestAttribute1: b\n"
+                        "testattribute1: a\n"));
+
+    setInput("a");
+    /* invalid value is simply ignored */
+    execCmd(showCmd, {"show", "--encoding", "Invalid", "--all", m_dbFile->fileName(), "/Sample Entry"});
     QCOMPARE(m_stdout->readAll(),
              QByteArray("Title: Sample Entry\n"
                         "UserName: User Name\n"

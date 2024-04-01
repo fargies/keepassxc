@@ -44,6 +44,12 @@ const QCommandLineOption Add::GenerateOption = QCommandLineOption(QStringList() 
                                                                                 << "generate",
                                                                   QObject::tr("Generate a password for the entry."));
 
+const QCommandLineOption Add::EncodingOption = QCommandLineOption(
+    QStringList() << "encoding",
+    QObject::tr("Encoding for attribute parameters (base64 or percent)."
+                "Provided values must be encoded accordingly when this is set."),
+    QObject::tr("encoding"));
+
 Add::Add()
 {
     name = QString("add");
@@ -52,6 +58,7 @@ Add::Add()
     options.append(Add::UrlOption);
     options.append(Add::NotesOption);
     options.append(Add::PasswordPromptOption);
+    options.append(Add::EncodingOption);
     positionalArguments.append({QString("entry"), QObject::tr("Path of the entry to add."), QString("")});
 
     // Password generation options.
@@ -76,6 +83,9 @@ int Add::executeWithDatabase(QSharedPointer<Database> database, QSharedPointer<Q
     const QStringList args = parser->positionalArguments();
     auto& entryPath = args.at(1);
 
+    Utils::Encoding encoding = Utils::parseEncoding(parser->value(Add::EncodingOption));
+    bool decodingStatus = true;
+
     // Cannot use those 2 options at the same time!
     if (parser->isSet(Add::GenerateOption) && parser->isSet(Add::PasswordPromptOption)) {
         err << QObject::tr("Cannot generate a password and prompt at the same time.") << endl;
@@ -99,15 +109,23 @@ int Add::executeWithDatabase(QSharedPointer<Database> database, QSharedPointer<Q
     }
 
     if (!parser->value(Add::UsernameOption).isEmpty()) {
-        entry->setUsername(parser->value(Add::UsernameOption));
+        entry->setUsername(Utils::decode(parser->value(Add::UsernameOption), encoding, &decodingStatus));
     }
 
     if (!parser->value(Add::UrlOption).isEmpty()) {
-        entry->setUrl(parser->value(Add::UrlOption));
+        entry->setUrl(Utils::decode(parser->value(Add::UrlOption), encoding, &decodingStatus));
     }
 
     if (!parser->value(Add::NotesOption).isEmpty()) {
-        entry->setNotes(parser->value(Add::NotesOption).replace("\\n", "\n"));
+        if (encoding == Utils::Encoding::None)
+            entry->setNotes(parser->value(Add::NotesOption).replace("\\n", "\n"));
+        else
+            entry->setNotes(Utils::decode(parser->value(Add::NotesOption), encoding, &decodingStatus));
+    }
+
+    if (!decodingStatus) {
+        err << QObject::tr("Failed to decode arguments.") << endl;
+        return EXIT_FAILURE;
     }
 
     if (parser->isSet(Add::PasswordPromptOption)) {

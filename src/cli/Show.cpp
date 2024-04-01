@@ -47,6 +47,12 @@ const QCommandLineOption Show::AttributesOption = QCommandLineOption(
         "If no attributes are specified, a summary of the default attributes is given."),
     QObject::tr("attribute"));
 
+const QCommandLineOption Show::EncodingOption = QCommandLineOption(
+    QStringList() << "encoding",
+    QObject::tr("Encode values using base64 or percent encoding."
+        "This option can be specified to use encode displayed values, enforcing the one-per-line rule and making it safe to process using external scripts."),
+    QObject::tr("encoding"));
+
 Show::Show()
 {
     name = QString("show");
@@ -56,6 +62,7 @@ Show::Show()
     options.append(Show::ProtectedAttributesOption);
     options.append(Show::AllAttributesOption);
     options.append(Show::AttachmentsOption);
+    options.append(Show::EncodingOption);
     positionalArguments.append({QString("entry"), QObject::tr("Name of the entry to show."), QString("")});
 }
 
@@ -70,6 +77,7 @@ int Show::executeWithDatabase(QSharedPointer<Database> database, QSharedPointer<
     bool showProtectedAttributes = parser->isSet(Show::ProtectedAttributesOption);
     bool showAllAttributes = parser->isSet(Show::AllAttributesOption);
     QStringList attributes = parser->values(Show::AttributesOption);
+    Utils::Encoding encoding = Utils::parseEncoding(parser->value(Show::EncodingOption));
 
     Entry* entry = database->rootGroup()->findEntryByPath(entryPath);
     if (!entry) {
@@ -113,7 +121,7 @@ int Show::executeWithDatabase(QSharedPointer<Database> database, QSharedPointer<
             if (!attributesWereSpecified) {
                 out << attributeName << ": ";
             }
-            out << Utils::getTopLevelField(entry, attributeName) << endl;
+            out << encode(Utils::getTopLevelField(entry, attributeName), encoding) << endl;
             continue;
         }
 
@@ -134,9 +142,9 @@ int Show::executeWithDatabase(QSharedPointer<Database> database, QSharedPointer<
             out << canonicalName << ": ";
         }
         if (entry->attributes()->isProtected(canonicalName) && !attributesWereSpecified && !showProtectedAttributes) {
-            out << "PROTECTED" << endl;
+            out << encode("PROTECTED", encoding) << endl;
         } else {
-            out << entry->resolveMultiplePlaceholders(entry->attributes()->value(canonicalName)) << endl;
+            out << encode(entry->resolveMultiplePlaceholders(entry->attributes()->value(canonicalName)), encoding) << endl;
         }
     }
 
@@ -154,7 +162,7 @@ int Show::executeWithDatabase(QSharedPointer<Database> database, QSharedPointer<
             for (const QString& attachmentName : attachments->keys()) {
                 // TODO: use QLocale::formattedDataSize when >= Qt 5.10
                 QString attachmentSize = Tools::humanReadableFileSize(attachments->value(attachmentName).size(), 1);
-                out << "  " << attachmentName << " (" << attachmentSize << ")" << endl;
+                out << "  " << encode(attachmentName, encoding) << " (" << attachmentSize << ")" << endl;
             }
         }
     }

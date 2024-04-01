@@ -42,6 +42,11 @@ namespace Utils
     QTextStream STDIN;
     QTextStream DEVNULL;
 
+    static const QMap<QString, Encoding> EncodingOptions = {
+        { QString("percent"), Encoding::Percent },
+        { QString("base64"), Encoding::Base64 },
+    };
+
     void setDefaultTextStreams()
     {
         auto fd = new QFile();
@@ -438,5 +443,50 @@ namespace Utils
         }
 
         return true;
+    }
+
+    Encoding parseEncoding(const QString &value)
+    {
+        auto it = EncodingOptions.constFind(value.toLower());
+        if (it == EncodingOptions.constEnd())
+            return Encoding::None;
+
+        return it.value();
+    }
+
+    QString encode(const QString &value, Encoding encoding)
+    {
+        switch (encoding)
+        {
+        case Encoding::Base64:
+            return QString(value.toUtf8().toBase64());
+        case Encoding::Percent:
+            return QString(value.toUtf8().toPercentEncoding());
+        default:
+        case Encoding::None:
+            return value;
+        }
+    }
+
+    QString decode(const QString &value, Encoding encoding, bool *decodingStatus)
+    {
+        switch (encoding)
+        {
+        case Encoding::Base64:
+        {
+
+            auto ret = QByteArray::fromBase64Encoding(value.toUtf8(), QByteArray::AbortOnBase64DecodingErrors);
+            if (decodingStatus) {
+                *decodingStatus = *decodingStatus &&
+                    (ret.decodingStatus == QByteArray::Base64DecodingStatus::Ok);
+            }
+            return QString(ret.decoded);
+        }
+        case Encoding::Percent:
+            return QString(QByteArray::fromPercentEncoding(value.toUtf8()));
+        default:
+        case Encoding::None:
+            return value;
+        }
     }
 } // namespace Utils
